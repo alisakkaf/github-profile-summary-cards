@@ -1,8 +1,13 @@
-name: GitHub Profile Summary Cards
+Name: GitHub Profile Summary Cards
 
 on:
   schedule:
-    - cron: "0 * * * *"
+    # Hourly
+    # - cron: "0 * * * *"
+    # Every 12 hours (Active)
+    - cron: "0 */12 * * *"
+    # Daily (At 00:00 UTC)
+    # - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
