@@ -2,12 +2,7 @@ name: GitHub Profile New2
 
 on:
   schedule:
-    # Hourly
-    # - cron: "0 * * * *"
-    # Every 12 hours (Active)
     - cron: "0 */12 * * *"
-    # Daily (At 00:00 UTC)
-    # - cron: "0 0 * * *"
   workflow_dispatch:
 
 jobs:
@@ -18,11 +13,46 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
-      - uses: vn7n24fzkq/github-profile-summary-cards@release
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Generate Summary Cards
+        uses: vn7n24fzkq/github-profile-summary-cards@release
         env:
           GITHUB_TOKEN: ${{ secrets.SUMMARY_GITHUB_TOKEN }}
         with:
           USERNAME: ${{ github.repository_owner }}
           THEME: "ayu_mirage"
-          AUTO_PUSH: true
+          AUTO_PUSH: false
+
+      - name: Fetch and Inject Donate Table
+        run: |
+          curl -s https://raw.githubusercontent.com/alisakkaf/github-profile-summary-cards/main/DONATE.md > donate_snippet.txt
+          python3 -c "
+          with open('README.md', 'r', encoding='utf-8') as f:
+              content = f.read()
+
+          with open('donate_snippet.txt', 'r', encoding='utf-8') as f:
+              snippet = f.read().strip()
+
+          start_tag = '<!-- DONATE_SECTION:START -->'
+          end_tag = '<!-- DONATE_SECTION:END -->'
+
+          if start_tag in content and end_tag in content:
+              before = content.split(start_tag)[0]
+              after = content.split(end_tag)[1]
+              new_content = before + start_tag + '\n\n' + snippet + '\n\n' + end_tag + after
+              with open('README.md', 'w', encoding='utf-8') as f:
+                  f.write(new_content)
+          else:
+              print('Warning: Donate tags not found in README.md')
+          "
+          rm -f donate_snippet.txt
+
+      - name: Commit and Push Changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --staged --quiet || git commit -m "docs: update profile summary cards and donation section"
+          git push
