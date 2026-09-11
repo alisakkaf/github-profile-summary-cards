@@ -1,0 +1,79 @@
+name: Global Donate Section Sync
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'DONATE.md'
+
+jobs:
+  sync-all-repos:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Repo
+        uses: actions/checkout@v4
+
+      - name: Fetch and Sync to All Repositories
+        env:
+          GH_TOKEN: ${{ secrets.GLOBAL_SYNC_TOKEN }}
+          OWNER: "alisakkaf"
+        run: |
+          DONATE_SNIPPET=$(cat DONATE.md)
+          export DONATE_SNIPPET
+
+          echo "Fetching all repositories for user $OWNER..."
+          REPOS=$(gh repo list "$OWNER" --limit 1000 --json name --jq '.[].name')
+
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          for REPO in $REPOS; do
+            echo "----------------------------------------"
+            echo "Checking repository: $REPO"
+
+            rm -rf temp_repo
+            git clone "https://x-access-token:${GH_TOKEN}@github.com/${OWNER}/${REPO}.git" temp_repo || continue
+            cd temp_repo
+
+            python3 -c "
+          import os
+
+          snippet = os.environ.get('DONATE_SNIPPET', '').strip()
+          start_tag = '<!-- DONATE_SECTION:START -->'
+          end_tag = '<!-- DONATE_SECTION:END -->'
+
+          files_to_check = ['README.md', 'README_AR.md', 'readme.md', 'readme_ar.md']
+          updated_any = False
+
+          for filename in files_to_check:
+              if os.path.exists(filename):
+                  with open(filename, 'r', encoding='utf-8') as f:
+                      content = f.read()
+
+                  if start_tag in content and end_tag in content:
+                      before = content.split(start_tag)[0]
+                      after = content.split(end_tag)[1]
+                      new_content = before + start_tag + '\n\n' + snippet + '\n\n' + end_tag + after
+
+                      if new_content != content:
+                          with open(filename, 'w', encoding='utf-8') as f:
+                              f.write(new_content)
+                          print(f'   -> Injected donate table into {filename}')
+                          updated_any = True
+                      else:
+                          print(f'   -> {filename} already up to date.')
+
+          "
+
+            if [ -n "$(git status --porcelain)" ]; then
+              git add README.md README_AR.md readme.md readme_ar.md 2>/dev/null || true
+              git commit -m "docs: sync donation section"
+              git push origin HEAD || echo "Failed to push to $REPO"
+            else
+              echo "No changes needed for $REPO."
+            fi
+
+            cd ..
+            rm -rf temp_repo
+          done
