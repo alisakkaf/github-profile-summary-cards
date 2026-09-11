@@ -25,9 +25,6 @@ jobs:
           echo "Fetching all repositories for user $OWNER..."
           REPOS=$(gh repo list "$OWNER" --limit 1000 --json name --jq '.[].name')
 
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
           for REPO in $REPOS; do
             echo "----------------------------------------"
             echo "Checking repository: $REPO"
@@ -35,6 +32,9 @@ jobs:
             rm -rf temp_repo
             git clone "https://x-access-token:${GH_TOKEN}@github.com/${OWNER}/${REPO}.git" temp_repo || continue
             cd temp_repo
+
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
 
             python3 -c "
           import os
@@ -44,7 +44,6 @@ jobs:
           end_tag = '<!-- DONATE_SECTION:END -->'
 
           files_to_check = ['README.md', 'README_AR.md', 'readme.md', 'readme_ar.md']
-          updated_any = False
 
           for filename in files_to_check:
               if os.path.exists(filename):
@@ -60,15 +59,15 @@ jobs:
                           with open(filename, 'w', encoding='utf-8') as f:
                               f.write(new_content)
                           print(f'   -> Injected donate table into {filename}')
-                          updated_any = True
                       else:
                           print(f'   -> {filename} already up to date.')
-
           "
 
             if [ -n "$(git status --porcelain)" ]; then
-              git add README.md README_AR.md readme.md readme_ar.md 2>/dev/null || true
-              git commit -m "docs: sync donation section"
+              MODIFIED_FILES=$(git status --porcelain | awk '{print $2}' | paste -sd ", " -)
+              
+              git add -A
+              git commit -m "Update ${MODIFIED_FILES} [skip ci]"
               git push origin HEAD || echo "Failed to push to $REPO"
             else
               echo "No changes needed for $REPO."
