@@ -1,14 +1,17 @@
-name: GitHub Profile New2
+name: Sync Profile & Donate Section
 
 on:
   schedule:
     - cron: "0 */12 * * *"
   workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    name: generate-github-profile-summary-cards
     permissions:
       contents: write
 
@@ -17,9 +20,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Generate Summary Cards
+        continue-on-error: true
         uses: vn7n24fzkq/github-profile-summary-cards@release
         env:
-          GITHUB_TOKEN: ${{ secrets.SUMMARY_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.SUMMARY_GITHUB_TOKEN || secrets.GITHUB_TOKEN }}
         with:
           USERNAME: ${{ github.repository_owner }}
           THEME: "ayu_mirage"
@@ -28,8 +32,21 @@ jobs:
       - name: Fetch and Inject Donate Table
         run: |
           curl -s https://raw.githubusercontent.com/alisakkaf/github-profile-summary-cards/main/DONATE.md > donate_snippet.txt
+          
           python3 -c "
-          with open('README.md', 'r', encoding='utf-8') as f:
+          import os
+
+          target = None
+          for name in ['README.md', 'README_AR.md', 'readme.md', 'Readme.md']:
+              if os.path.exists(name):
+                  target = name
+                  break
+
+          if not target:
+              print('Warning: No README file found in this repository!')
+              exit(0)
+
+          with open(target, 'r', encoding='utf-8') as f:
               content = f.read()
 
           with open('donate_snippet.txt', 'r', encoding='utf-8') as f:
@@ -42,10 +59,11 @@ jobs:
               before = content.split(start_tag)[0]
               after = content.split(end_tag)[1]
               new_content = before + start_tag + '\n\n' + snippet + '\n\n' + end_tag + after
-              with open('README.md', 'w', encoding='utf-8') as f:
+              with open(target, 'w', encoding='utf-8') as f:
                   f.write(new_content)
+              print(f'Successfully injected donate table into {target}')
           else:
-              print('Warning: Donate tags not found in README.md')
+              print(f'Tags not found in {target}. Skipped.')
           "
           rm -f donate_snippet.txt
 
@@ -53,6 +71,5 @@ jobs:
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git diff --staged --quiet || git commit -m "docs: update profile summary cards and donation section"
-          git push
+          git add -A
+          git diff --staged --quiet || (git commit -m "docs: sync summary cards and donation section" && git push)
